@@ -113,10 +113,42 @@
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  :root {
+    color-scheme: light;
   }
+
+  .dark {
+    color-scheme: dark;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply min-h-dvh bg-background text-foreground antialiased;
+    font-family: var(--font-geist-sans), var(--font-sans);
+    font-feature-settings: "ss01" on, "cv11" on;
+    background-attachment: fixed;
+    background-image:
+      radial-gradient(140% 120% at 0% 0%, color-mix(in oklch, var(--primary) 15%, transparent) 0%, transparent 55%),
+      radial-gradient(160% 130% at 100% 0%, color-mix(in oklch, var(--accent) 16%, transparent) 0%, transparent 60%),
+      linear-gradient(180deg, color-mix(in oklch, var(--muted) 22%, transparent) 0%, transparent 65%);
+  }
+
+  ::selection {
+    @apply bg-primary/20 text-foreground;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring/70 ring-offset-2 ring-offset-background;
+  }
+
+  a {
+    @apply text-foreground/80 transition-colors duration-150 hover:text-foreground;
   }
 }
