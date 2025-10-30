@@ -4,9 +4,8 @@
 
 import { ReactNode, RefObject, useCallback, useMemo, useState } from "react"
 
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { Status, Task, getTimeHorizon } from "@/types/momentum"
+import { Status, Task } from "@/types/momentum"
 import {
   DndContext,
   DragEndEvent,
@@ -17,30 +16,16 @@ import {
 
 import { TaskCard } from "./task-card"
 
-type ColumnId =
-  | "backlog"
-  | "overdue"
-  | "today"
-  | "tomorrow"
-  | "thisWeek"
-  | "horizon"
-  | "done"
+type DateColumnId = `date:${string}`
+
+type ColumnId = "backlog" | "done" | DateColumnId
 
 interface ColumnDefinition {
   id: ColumnId
   title: string
   description?: string
+  dateIso?: string
 }
-
-const columnDefinitions: ColumnDefinition[] = [
-  { id: "backlog", title: "Backlog", description: "Ideas waiting to be scheduled" },
-  { id: "overdue", title: "Overdue" },
-  { id: "today", title: "Today" },
-  { id: "tomorrow", title: "Tomorrow" },
-  { id: "thisWeek", title: "This Week" },
-  { id: "horizon", title: "Horizon" },
-  { id: "done", title: "Done" },
-]
 
 const addDays = (date: Date, offset: number): Date => {
   const result = new Date(date)
@@ -53,6 +38,18 @@ const toStartOfDayISO = (date: Date): string => {
   next.setHours(0, 0, 0, 0)
   return next.toISOString()
 }
+
+const toStartOfDayISOFromValue = (value: string | Date): string => {
+  const date = value instanceof Date ? value : new Date(value)
+  return toStartOfDayISO(date)
+}
+
+const createDateColumnId = (iso: string): DateColumnId => `date:${iso}`
+
+const isDateColumnId = (columnId: ColumnId): columnId is DateColumnId =>
+  columnId.startsWith("date:")
+
+const getIsoFromColumnId = (columnId: DateColumnId): string => columnId.slice(5)
 
 interface TaskBoardProps {
   tasks: Task[]
@@ -71,7 +68,7 @@ const BoardColumn = ({ column, tasks, TaskCardComponent }: BoardColumnProps) => 
   const droppable = useDroppable({ id: column.id })
 
   return (
-    <div className="flex w-[18rem] shrink-0 flex-col gap-3">
+    <div className="flex flex-shrink-0 basis-[calc((100vw-6rem)/4.5)] min-w-[clamp(320px,calc((100vw-6rem)/4.5),26rem)] flex-col gap-3">
       <div>
         <h3 className="text-sm font-semibold text-foreground">{column.title}</h3>
         {column.description ? (
@@ -98,43 +95,15 @@ const BoardColumn = ({ column, tasks, TaskCardComponent }: BoardColumnProps) => 
   )
 }
 
-const getColumnIdForTask = (
-  task: Task,
-  today: Date,
-  weekSpan: number,
-): ColumnId => {
-  if (task.status === Status.DONE) return "done"
-  if (task.status === Status.ARCHIVED) return "done"
+const getColumnIdForTask = (task: Task): ColumnId => {
+  if (task.status === Status.DONE || task.status === Status.ARCHIVED) return "done"
 
   if (!task.plannedDate || task.status === Status.BACKLOG) {
     return "backlog"
   }
 
-  const horizon = getTimeHorizon(task.plannedDate, today, { weekSpan })
-
-  switch (horizon) {
-    case "overdue":
-      return "overdue"
-    case "today":
-      return "today"
-    case "tomorrow":
-      return "tomorrow"
-    case "thisWeek":
-      return "thisWeek"
-    case "later":
-      return "horizon"
-    case "unscheduled":
-    default:
-      return "backlog"
-  }
-}
-
-const offsets: Record<Exclude<ColumnId, "backlog" | "done">, number> = {
-  overdue: -1,
-  today: 0,
-  tomorrow: 1,
-  thisWeek: 2,
-  horizon: 5,
+  const iso = toStartOfDayISOFromValue(task.plannedDate)
+  return createDateColumnId(iso)
 }
 
 export function TaskBoard({ tasks, onOpenTask, onUpdateTask, weekSpan }: TaskBoardProps) {
@@ -153,6 +122,61 @@ export function TaskBoard({ tasks, onOpenTask, onUpdateTask, weekSpan }: TaskBoa
     return map
   }, [tasks])
 
+  const columnDefinitions = useMemo<ColumnDefinition[]>(() => {
+    const formatter = new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    })
+
+    const dayColumns = new Map<string, ColumnDefinition>()
+
+    const ensureDayColumn = (date: Date, overrideTitle?: string) => {
+      const iso = toStartOfDayISO(date)
+      if (dayColumns.has(iso)) {
+        const existing = dayColumns.get(iso)
+        if (existing && overrideTitle) {
+          dayColumns.set(iso, { ...existing, title: overrideTitle })
+        }
+        return
+      }
+
+      dayColumns.set(iso, {
+        id: createDateColumnId(iso),
+        title: overrideTitle ?? formatter.format(new Date(iso)),
+        dateIso: iso,
+      })
+    }
+
+    ensureDayColumn(referenceDate, "Today")
+    ensureDayColumn(addDays(referenceDate, 1), "Tomorrow")
+
+    for (let offset = 2; offset < weekSpan; offset += 1) {
+      ensureDayColumn(addDays(referenceDate, offset))
+    }
+
+    tasks.forEach((task) => {
+      if (!task.plannedDate) return
+      ensureDayColumn(new Date(task.plannedDate))
+    })
+
+    const orderedDayColumns = Array.from(dayColumns.values()).sort((a, b) => {
+      const aTime = a.dateIso ? new Date(a.dateIso).getTime() : 0
+      const bTime = b.dateIso ? new Date(b.dateIso).getTime() : 0
+      return aTime - bTime
+    })
+
+    return [
+      {
+        id: "backlog",
+        title: "Backlog",
+        description: "Ideas waiting to be scheduled",
+      },
+      ...orderedDayColumns,
+      { id: "done", title: "Done" },
+    ]
+  }, [referenceDate, tasks, weekSpan])
+
   const normalizedColumns = useMemo(() => {
     const groups = new Map<ColumnId, Task[]>(
       columnDefinitions.map((column) => [column.id, []]),
@@ -163,7 +187,10 @@ export function TaskBoard({ tasks, onOpenTask, onUpdateTask, weekSpan }: TaskBoa
         return
       }
 
-      const columnId = getColumnIdForTask(task, referenceDate, weekSpan)
+      const columnId = getColumnIdForTask(task)
+      if (!groups.has(columnId)) {
+        groups.set(columnId, [])
+      }
       groups.get(columnId)?.push(task)
     })
 
@@ -184,7 +211,7 @@ export function TaskBoard({ tasks, onOpenTask, onUpdateTask, weekSpan }: TaskBoa
       column,
       tasks: (groups.get(column.id) ?? []).slice().sort(sortTasks),
     }))
-  }, [referenceDate, tasks, weekSpan])
+  }, [columnDefinitions, tasks])
 
   const handleStatusChange = useCallback(
     (taskId: string, status: Status) => {
@@ -226,19 +253,22 @@ export function TaskBoard({ tasks, onOpenTask, onUpdateTask, weekSpan }: TaskBoa
         }
       }
 
-      const offset = columnId === "horizon" ? Math.max(weekSpan - 1, offsets.horizon) : offsets[columnId]
-      const plannedDate = toStartOfDayISO(addDays(referenceDate, offset))
+      if (isDateColumnId(columnId)) {
+        const plannedDate = getIsoFromColumnId(columnId)
 
-      const nextStatus = task.status === Status.BLOCKED ? Status.BLOCKED : Status.ACTIVE
+        const nextStatus = task.status === Status.BLOCKED ? Status.BLOCKED : Status.ACTIVE
 
-      return {
-        status: nextStatus,
-        plannedDate,
-        manualPinned: true,
-        completedAt: null,
+        return {
+          status: nextStatus,
+          plannedDate,
+          manualPinned: true,
+          completedAt: null,
+        }
       }
+
+      return null
     },
-    [referenceDate, weekSpan],
+    [],
   )
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -286,8 +316,8 @@ export function TaskBoard({ tasks, onOpenTask, onUpdateTask, weekSpan }: TaskBoa
 
   return (
     <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <ScrollArea className="w-full">
-        <div className="flex gap-4 pb-4">
+      <div className="w-full overflow-x-auto pb-4">
+        <div className="flex gap-4">
           {normalizedColumns.map(({ column, tasks: columnTasks }) => (
             <BoardColumn
               key={column.id}
@@ -297,7 +327,7 @@ export function TaskBoard({ tasks, onOpenTask, onUpdateTask, weekSpan }: TaskBoa
             />
           ))}
         </div>
-      </ScrollArea>
+      </div>
     </DndContext>
   )
 }
