@@ -1,16 +1,14 @@
 "use client"
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 import { FocusModePanel } from "@/components/focus-mode-panel"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { TaskBoard } from "@/components/task-board"
 import { TaskEditorSheet } from "@/components/task-editor-sheet"
 import {
-  addQuickTask,
   clearSession,
   runAutoPlan,
   toggleFocusMode,
@@ -24,7 +22,6 @@ import { Task } from "@/types/momentum"
 export default function AppPage() {
   const router = useRouter()
   const hasHydrated = useHasHydrated()
-  const [quickTitle, setQuickTitle] = useState("")
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const signOutRedirectRef = useRef(false)
 
@@ -44,19 +41,6 @@ export default function AppPage() {
   const selectedTask: Task | null = useMemo(
     () => tasks.find((task) => task.id === selectedTaskId) ?? null,
     [selectedTaskId, tasks],
-  )
-
-  const handleQuickAdd = useCallback(
-    (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault()
-      const title = quickTitle.trim()
-      if (!title) return
-
-      const task = addQuickTask(title)
-      setQuickTitle("")
-      setSelectedTaskId(task.id)
-    },
-    [quickTitle],
   )
 
   const handleTaskUpdate = useCallback((taskId: string, patch: Partial<Task>) => {
@@ -128,20 +112,6 @@ export default function AppPage() {
             </Button>
           </div>
         </div>
-        <form
-          onSubmit={handleQuickAdd}
-          className="flex flex-col gap-3 rounded-xl border border-dashed border-border/70 bg-background/60 p-4 sm:flex-row"
-        >
-          <Input
-            placeholder='Quick add a task—e.g. "Edit next video script"'
-            value={quickTitle}
-            onChange={(event) => setQuickTitle(event.target.value)}
-            className="flex-1"
-          />
-          <Button type="submit" className="sm:w-fit">
-            Add task
-          </Button>
-        </form>
       </header>
 
       <div
