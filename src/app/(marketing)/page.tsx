@@ -1,14 +1,4 @@
 import Link from "next/link"
-import type { LucideIcon } from "lucide-react"
-import {
-  ArrowRight,
-  CalendarCheck2,
-  Clock3,
-  LayoutDashboard,
-  Sparkles,
-  TrendingUp,
-} from "lucide-react"
-
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,32 +8,33 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Icon, type IconName } from "@/components/icons"
 
 const featureCards: Array<{
   title: string
   description: string
-  icon: LucideIcon
+  icon: IconName
   bullets: string[]
 }> = [
   {
     title: "AI-assisted planning",
     description:
       "Generate a balanced upload schedule and let Momentum auto-prioritize what matters next.",
-    icon: Sparkles,
+    icon: "sparkles",
     bullets: ["Smart scheduling", "Priority recommendations", "Focus suggestions"],
   },
   {
     title: "End-to-end workflow",
     description:
       "Draft briefs, manage edits, and publish videos without juggling a dozen tools or tabs.",
-    icon: LayoutDashboard,
+    icon: "layoutDashboard",
     bullets: ["Collaborative briefs", "Version tracking", "Publishing checklist"],
   },
   {
     title: "Creator-friendly analytics",
     description:
       "Spot momentum shifts with glanceable dashboards tailored for YouTube growth.",
-    icon: TrendingUp,
+    icon: "trendingUp",
     bullets: ["Retention tracking", "Goal dashboards", "Real-time insights"],
   },
 ]
@@ -88,7 +79,7 @@ export default function MarketingPage() {
             <Button asChild size="lg" className="gap-2">
               <Link href="/auth">
                 Open Momentum
-                <ArrowRight className="h-4 w-4" />
+                <Icon name="arrowRight" className="h-4 w-4" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
@@ -119,7 +110,7 @@ export default function MarketingPage() {
               </CardDescription>
             </div>
             <Badge variant="secondary" className="gap-1">
-              <Clock3 className="h-3.5 w-3.5" />
+              <Icon name="clock" className="h-3.5 w-3.5" />
               Always on
             </Badge>
           </CardHeader>
@@ -154,7 +145,7 @@ export default function MarketingPage() {
             <Card key={feature.title} className="relative overflow-hidden border-border/70 bg-background/80 backdrop-blur">
               <CardHeader className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <feature.icon className="h-5 w-5 text-primary" />
+                  <Icon name={feature.icon} className="h-5 w-5 text-primary" />
                   <CardTitle className="text-xl font-semibold text-foreground">
                     {feature.title}
                   </CardTitle>
@@ -166,7 +157,7 @@ export default function MarketingPage() {
               <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
                 {feature.bullets.map((bullet) => (
                   <div key={bullet} className="flex items-center gap-2 text-left">
-                    <CalendarCheck2 className="h-4 w-4 text-primary/80" />
+                    <Icon name="calendarCheck" className="h-4 w-4 text-primary/80" />
                     <span>{bullet}</span>
                   </div>
                 ))}

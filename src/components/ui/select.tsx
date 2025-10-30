@@ -1,7 +1,6 @@
 import * as React from "react"
-import { ChevronDown } from "lucide-react"
-
 import { cn } from "@/lib/utils"
+import { Icon } from "@/components/icons"
 
 const Select = React.forwardRef<
   HTMLSelectElement,
@@ -26,7 +25,7 @@ const Select = React.forwardRef<
         {children}
       </select>
       <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-muted-foreground">
-        <ChevronDown className="size-4" aria-hidden="true" />
+        <Icon name="chevronDown" className="size-4" />
       </span>
     </div>
   )

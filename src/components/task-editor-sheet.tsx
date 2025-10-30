@@ -2,18 +2,16 @@
 
 import { ChangeEvent } from "react"
 
+import { DatePickerField } from "@/components/date-picker-field"
+import { DurationInput } from "@/components/duration-input"
+import { PrioritySelect } from "@/components/priority-select"
+import { StatusToggleGroup } from "@/components/status-toggle-group"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
 import { Priority, Status, Task } from "@/types/momentum"
 
 interface TaskEditorSheetProps {
@@ -23,38 +21,33 @@ interface TaskEditorSheetProps {
   onUpdate: (patch: Partial<Task>) => void
 }
 
-const priorityOptions = Object.values(Priority)
-const statusOptions = Object.values(Status).filter((status) => status !== Status.ARCHIVED)
-
-const toDateInputValue = (value?: string | null) => (value ? value.slice(0, 10) : "")
-
-const toISODate = (value: string) =>
-  value ? new Date(`${value}T00:00:00`).toISOString() : null
-
 export function TaskEditorSheet({ task, open, onOpenChange, onUpdate }: TaskEditorSheetProps) {
   const handleStringChange = (key: keyof Task) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     onUpdate({ [key]: event.target.value } as Partial<Task>)
   }
 
-  const handleNumberChange = (key: keyof Task) => (event: ChangeEvent<HTMLInputElement>) => {
-    const nextValue = event.target.value
-    const parsed = Number(nextValue)
-    onUpdate({ [key]: Number.isFinite(parsed) ? parsed : 0 } as Partial<Task>)
+  const handlePriorityChange = (priority: Priority) => {
+    onUpdate({ priority })
   }
 
-  const handleDateChange = (key: "plannedDate" | "dueDate") =>
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const value = event.target.value
-      onUpdate({ [key]: value ? toISODate(value) : null } as Partial<Task>)
-    }
+  const handleStatusChange = (status: Status) => {
+    onUpdate({ status })
+  }
 
-  const handleSelectChange = (key: "priority" | "status") =>
-    (event: ChangeEvent<HTMLSelectElement>) => {
-      onUpdate({ [key]: event.target.value } as Partial<Task>)
-    }
+  const handleDurationChange = (duration: number | null) => {
+    onUpdate({ durationMinutes: duration ?? 0 } as Partial<Task>)
+  }
 
-  const handlePinnedChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onUpdate({ manualPinned: event.target.checked })
+  const handlePlannedDateChange = (value: string | null) => {
+    onUpdate({ plannedDate: value } as Partial<Task>)
+  }
+
+  const handleDueDateChange = (value: string | null) => {
+    onUpdate({ dueDate: value } as Partial<Task>)
+  }
+
+  const handlePinnedChange = (checked: boolean) => {
+    onUpdate({ manualPinned: checked })
   }
 
   return (
@@ -88,80 +81,63 @@ export function TaskEditorSheet({ task, open, onOpenChange, onUpdate }: TaskEdit
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="task-priority">Priority</Label>
-                <select
+                <PrioritySelect
                   id="task-priority"
                   value={task.priority}
-                  onChange={handleSelectChange("priority")}
-                  className="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {priorityOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option.charAt(0).toUpperCase() + option.slice(1)}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={handlePriorityChange}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="task-status">Status</Label>
-                <select
+                <StatusToggleGroup
                   id="task-status"
                   value={task.status}
-                  onChange={handleSelectChange("status")}
-                  className="flex h-10 w-full items-center justify-between rounded-md border border-border bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {statusOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option.charAt(0).toUpperCase() + option.slice(1)}
-                    </option>
-                  ))}
-                </select>
+                  onValueChange={handleStatusChange}
+                  aria-label="Task status"
+                />
               </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="task-planned">Planned date</Label>
-                <Input
-                  id="task-planned"
-                  type="date"
-                  value={toDateInputValue(task.plannedDate)}
-                  onChange={handleDateChange("plannedDate")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="task-due">Deadline</Label>
-                <Input
-                  id="task-due"
-                  type="date"
-                  value={toDateInputValue(task.dueDate)}
-                  onChange={handleDateChange("dueDate")}
-                />
-              </div>
+              <DatePickerField
+                id="task-planned"
+                label="Planned date"
+                value={task.plannedDate ?? null}
+                onChange={handlePlannedDateChange}
+              />
+              <DatePickerField
+                id="task-due"
+                label="Deadline"
+                value={task.dueDate ?? null}
+                onChange={handleDueDateChange}
+                placeholder="No deadline"
+              />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="task-duration">Duration (minutes)</Label>
-                <Input
+                <DurationInput
                   id="task-duration"
-                  type="number"
-                  min={0}
-                  step={15}
-                  value={task.durationMinutes ?? 0}
-                  onChange={handleNumberChange("durationMinutes")}
+                  value={task.durationMinutes ?? null}
+                  onValueChange={handleDurationChange}
                 />
               </div>
-              <div className="flex items-center gap-2 pt-6">
-                <input
+              <div className="flex items-center justify-between rounded-md border border-dashed border-border/60 p-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    Manually pin to day
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Override the planner and keep this task anchored to its chosen date.
+                  </p>
+                </div>
+                <Switch
                   id="task-pinned"
-                  type="checkbox"
                   checked={Boolean(task.manualPinned)}
-                  onChange={handlePinnedChange}
-                  className="h-4 w-4 rounded border border-border"
+                  onCheckedChange={handlePinnedChange}
+                  aria-label="Toggle manual pin"
                 />
-                <Label htmlFor="task-pinned" className="text-sm">
-                  Manually pinned to selected day
-                </Label>
               </div>
             </div>
           </div>
