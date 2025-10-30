@@ -11,7 +11,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Icon } from "@/components/icons"
 import { cn } from "@/lib/utils"
-import { PRIORITY_LABELS, Priority, Status, Task, formatPlannedDate } from "@/types/momentum"
+import {
+  PRIORITY_LABELS,
+  Priority,
+  Status,
+  Task,
+  formatPlannedDate,
+} from "@/types/momentum"
 import { DraggableAttributes, DraggableListeners } from "@dnd-kit/core"
 
 const priorityStyles: Record<Priority, string> = {
@@ -46,6 +52,16 @@ export interface TaskCardProps {
 export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, draggable }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, isDragging, style } = draggable
 
+  const normalizeDay = (value: string | Date | null | undefined) => {
+    if (!value) return null
+
+    const date = value instanceof Date ? new Date(value) : new Date(value)
+    if (Number.isNaN(date.getTime())) return null
+
+    date.setHours(0, 0, 0, 0)
+    return date
+  }
+
   const handleOpen = () => {
     onOpenDetails(task.id)
   }
@@ -75,6 +91,14 @@ export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, 
 
   const duration = task.durationMinutes ?? 0
   const deadline = formatPlannedDate(task.dueDate)
+  const dueDateDay = normalizeDay(task.dueDate)
+  const plannedDateDay = normalizeDay(task.plannedDate)
+  const today = normalizeDay(new Date())
+  const isPastDeadline = Boolean(
+    dueDateDay &&
+      ((plannedDateDay && plannedDateDay.getTime() > dueDateDay.getTime()) ||
+        (today && today.getTime() > dueDateDay.getTime())),
+  )
 
   return (
     <div
@@ -99,6 +123,15 @@ export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, 
           {task.manualPinned ? (
             <Badge variant="secondary" className="text-xs font-medium">
               Pinned
+            </Badge>
+          ) : null}
+          {isPastDeadline ? (
+            <Badge
+              variant="destructive"
+              aria-label="Past deadline"
+              className="h-2.5 w-2.5 min-w-0 rounded-full px-0 py-0"
+            >
+              <span className="sr-only">Past deadline</span>
             </Badge>
           ) : null}
         </div>
