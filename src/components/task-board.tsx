@@ -2,10 +2,25 @@
 
 /* eslint-disable react-hooks/refs */
 
-import { ReactNode, RefObject, useCallback, useMemo, useState } from "react"
+import { FormEvent, ReactNode, RefObject, useCallback, useMemo, useState } from "react"
 
+import { DatePickerField } from "@/components/date-picker-field"
+import { DurationInput } from "@/components/duration-input"
+import { PrioritySelect } from "@/components/priority-select"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { addQuickTask, updateTask as updateTaskInStore } from "@/lib/momentum-store"
 import { cn } from "@/lib/utils"
-import { Status, Task } from "@/types/momentum"
+import { Priority, Status, Task } from "@/types/momentum"
 import {
   DndContext,
   DragEndEvent,
@@ -62,9 +77,10 @@ interface BoardColumnProps {
   column: ColumnDefinition
   tasks: Task[]
   TaskCardComponent: ({ task }: { task: Task }) => ReactNode
+  onAddTask: (column: ColumnDefinition) => void
 }
 
-const BoardColumn = ({ column, tasks, TaskCardComponent }: BoardColumnProps) => {
+const BoardColumn = ({ column, tasks, TaskCardComponent, onAddTask }: BoardColumnProps) => {
   const droppable = useDroppable({ id: column.id })
 
   return (
@@ -83,13 +99,18 @@ const BoardColumn = ({ column, tasks, TaskCardComponent }: BoardColumnProps) => 
           droppable.isOver && "border-primary/50 bg-primary/5",
         )}
       >
-        {tasks.length ? (
-          tasks.map((task) => <TaskCardComponent key={task.id} task={task} />)
-        ) : (
-          <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border/70 p-4 text-center text-xs text-muted-foreground">
-            Drag tasks here
-          </div>
-        )}
+        <div className="flex flex-1 flex-col gap-3">
+          {tasks.length ? (
+            tasks.map((task) => <TaskCardComponent key={task.id} task={task} />)
+          ) : (
+            <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border/70 p-4 text-center text-xs text-muted-foreground">
+              Drag tasks here
+            </div>
+          )}
+        </div>
+        <Button type="button" variant="outline" onClick={() => onAddTask(column)}>
+          Add task
+        </Button>
       </div>
     </div>
   )
@@ -108,11 +129,21 @@ const getColumnIdForTask = (task: Task): ColumnId => {
 
 export function TaskBoard({ tasks, onOpenTask, onUpdateTask, weekSpan }: TaskBoardProps) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [createColumn, setCreateColumn] = useState<ColumnDefinition | null>(null)
+  const [createTitle, setCreateTitle] = useState("")
+  const [createDuration, setCreateDuration] = useState<number | null>(60)
+  const [createPriority, setCreatePriority] = useState<Priority>(Priority.MEDIUM)
   const referenceDate = useMemo(() => {
     const base = new Date()
     base.setHours(0, 0, 0, 0)
     return base
   }, [])
+  const defaultDueDate = useMemo(
+    () => toStartOfDayISO(addDays(referenceDate, 7)),
+    [referenceDate],
+  )
+  const [createDueDate, setCreateDueDate] = useState<string | null>(defaultDueDate)
 
   const taskMap = useMemo(() => {
     const map = new Map<string, Task>()
@@ -314,21 +345,167 @@ export function TaskBoard({ tasks, onOpenTask, onUpdateTask, weekSpan }: TaskBoa
     )
   }
 
+  const resetCreateForm = useCallback(() => {
+    setCreateTitle("")
+    setCreateDuration(60)
+    setCreatePriority(Priority.MEDIUM)
+    setCreateDueDate(defaultDueDate)
+    setCreateColumn(null)
+  }, [defaultDueDate])
+
+  const handleCreateOpenChange = useCallback(
+    (open: boolean) => {
+      setIsCreateOpen(open)
+      if (!open) {
+        resetCreateForm()
+      }
+    },
+    [resetCreateForm],
+  )
+
+  const handleAddTaskClick = useCallback(
+    (column: ColumnDefinition) => {
+      setCreateColumn(column)
+      setCreateTitle("")
+      setCreateDuration(60)
+      setCreatePriority(Priority.MEDIUM)
+      setCreateDueDate(defaultDueDate)
+      setIsCreateOpen(true)
+    },
+    [defaultDueDate],
+  )
+
+  const handleCreateSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      if (!createColumn) return
+
+      const trimmedTitle = createTitle.trim()
+      if (!trimmedTitle) return
+
+      const task = addQuickTask(trimmedTitle)
+      const nowIso = new Date().toISOString()
+
+      let status = Status.BACKLOG
+      let plannedDate: string | null = null
+      let manualPinned = false
+      let completedAt: string | null = null
+
+      if (createColumn.id === "done") {
+        status = Status.DONE
+        completedAt = nowIso
+      } else if (createColumn.id === "backlog") {
+        status = Status.BACKLOG
+      } else if (isDateColumnId(createColumn.id)) {
+        status = Status.ACTIVE
+        plannedDate = createColumn.dateIso ?? null
+        manualPinned = true
+      }
+
+      updateTaskInStore(
+        task.id,
+        {
+          priority: createPriority,
+          status,
+          plannedDate,
+          manualPinned,
+          completedAt,
+          dueDate: createDueDate,
+          durationMinutes: createDuration ?? 0,
+        } as Partial<Task>,
+      )
+
+      handleCreateOpenChange(false)
+    },
+    [
+      createColumn,
+      createDuration,
+      createDueDate,
+      createPriority,
+      createTitle,
+      handleCreateOpenChange,
+    ],
+  )
+
+  const createDialogTitle = createColumn ? `Add task to ${createColumn.title}` : "Add task"
+
+  const isCreateDisabled = !createTitle.trim()
+
   return (
-    <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="w-full overflow-x-auto pb-4">
-        <div className="flex gap-4">
-          {normalizedColumns.map(({ column, tasks: columnTasks }) => (
-            <BoardColumn
-              key={column.id}
-              column={column}
-              tasks={columnTasks}
-              TaskCardComponent={DraggableTaskCard}
-            />
-          ))}
+    <>
+      <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className="w-full overflow-x-auto pb-4">
+          <div className="flex gap-4">
+            {normalizedColumns.map(({ column, tasks: columnTasks }) => (
+              <BoardColumn
+                key={column.id}
+                column={column}
+                tasks={columnTasks}
+                TaskCardComponent={DraggableTaskCard}
+                onAddTask={handleAddTaskClick}
+              />
+            ))}
+          </div>
         </div>
-      </div>
-    </DndContext>
+      </DndContext>
+
+      <Dialog open={isCreateOpen} onOpenChange={handleCreateOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{createDialogTitle}</DialogTitle>
+            <DialogDescription>
+              Capture the essentials to plan your next focus session.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateSubmit} className="flex flex-col gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-task-title">Title</Label>
+              <Input
+                id="new-task-title"
+                value={createTitle}
+                onChange={(event) => setCreateTitle(event.target.value)}
+                placeholder="What are you working on?"
+                autoFocus
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="new-task-priority">Priority</Label>
+                <PrioritySelect
+                  id="new-task-priority"
+                  value={createPriority}
+                  onValueChange={setCreatePriority}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-task-duration">Duration (minutes)</Label>
+                <DurationInput
+                  id="new-task-duration"
+                  value={createDuration}
+                  onValueChange={setCreateDuration}
+                  min={0}
+                />
+              </div>
+            </div>
+            <DatePickerField
+              id="new-task-deadline"
+              label="Deadline"
+              value={createDueDate}
+              onChange={setCreateDueDate}
+              description="When would you like this completed?"
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => handleCreateOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isCreateDisabled}>
+                Create task
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
