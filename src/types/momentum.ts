@@ -173,6 +173,8 @@ export interface Task {
   manualPinned?: boolean | null;
   /** Zero-based index representing manual ordering within a column. */
   orderIndex?: number | null;
+  /** Marks the task as at-risk of missing commitments. */
+  atRisk?: boolean | null;
   /** Date the task moved to {@link Status.DONE}. */
   completedAt?: string | null;
   /** Optional labels/tags applied by the user. */
