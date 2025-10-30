@@ -237,6 +237,21 @@ export const upsertTask = (task: Task): void => {
   });
 };
 
+export const updateTask = (taskId: string, patch: Partial<Task>): void => {
+  setState((current) => {
+    const index = current.tasks.findIndex((task) => task.id === taskId);
+    if (index === -1) {
+      return null;
+    }
+
+    const updated = withTimestamps({ ...current.tasks[index], ...patch, id: taskId }, false);
+    const nextTasks = [...current.tasks];
+    nextTasks[index] = updated;
+
+    return { tasks: nextTasks };
+  });
+};
+
 export const removeTask = (taskId: string): void => {
   setState((current) => ({
     tasks: current.tasks.filter((task) => task.id !== taskId),
@@ -268,6 +283,7 @@ export const addQuickTask = (title: string): Task => {
     priority: defaultPriority ?? Priority.MEDIUM,
     status: Status.BACKLOG,
     createdAt: new Date().toISOString(),
+    manualPinned: false,
   };
 
   upsertTask(task);

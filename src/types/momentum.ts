@@ -79,6 +79,8 @@ export interface Task {
   updatedAt?: string | null;
   /** Planned completion date as an ISO string. */
   plannedDate?: string | null;
+  /** Indicates whether the task was explicitly pinned by the user. */
+  manualPinned?: boolean | null;
   /** Date the task moved to {@link Status.DONE}. */
   completedAt?: string | null;
   /** Optional labels/tags applied by the user. */

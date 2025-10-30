@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@dnd-kit/core": ["./src/vendor/@dnd-kit/core"],
+      "@radix-ui/react-scroll-area": ["./src/vendor/@radix-ui/react-scroll-area"]
     }
   },
   "include": [
