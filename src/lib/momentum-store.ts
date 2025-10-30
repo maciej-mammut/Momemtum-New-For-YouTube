@@ -6,6 +6,7 @@ import {
   Status,
   Task,
   UserSettings,
+  getTimeHorizon,
 } from "@/types/momentum";
 
 import { loadJSON, saveJSON } from "./storage";
@@ -24,15 +25,21 @@ export interface SessionInfo {
 export interface MomentumState {
   tasks: Task[];
   settings: UserSettings;
-  focusMode: boolean;
+  focusMode: FocusModeState;
   autoPlanEnabled: boolean;
   session: SessionInfo;
+}
+
+export interface FocusModeState {
+  enabled: boolean;
+  activeTaskId: string | null;
+  queue: string[];
 }
 
 interface PersistedMomentumState {
   tasks: Task[];
   settings: UserSettings;
-  focusMode: boolean;
+  focusMode: boolean | FocusModeState;
   autoPlanEnabled: boolean;
 }
 
@@ -67,10 +74,115 @@ const createDefaultSession = (): SessionInfo => ({
   expiresAt: new Date(Date.now() + 1_800_000).toISOString(),
 });
 
+const createFocusModeState = (
+  base: Partial<FocusModeState> = {},
+): FocusModeState => {
+  const enabled = base.enabled ?? false;
+  const queue = Array.isArray(base.queue) ? [...base.queue] : [];
+
+  return {
+    enabled,
+    activeTaskId: enabled ? base.activeTaskId ?? null : null,
+    queue: enabled ? queue : [],
+  };
+};
+
+const computeFocusQueue = (
+  tasks: Task[],
+  settings: UserSettings,
+): string[] => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return tasks
+    .filter((task) => {
+      if (task.status === Status.DONE || task.status === Status.ARCHIVED) {
+        return false;
+      }
+
+      if (!task.plannedDate) {
+        return false;
+      }
+
+      return (
+        getTimeHorizon(task.plannedDate, today, {
+          weekSpan: settings.weekSpan,
+        }) === "today"
+      );
+    })
+    .sort((a, b) => {
+      const pinWeight = Number(Boolean(b.manualPinned)) - Number(Boolean(a.manualPinned));
+      if (pinWeight !== 0) return pinWeight;
+
+      const plannedA = a.plannedDate ? new Date(a.plannedDate).getTime() : 0;
+      const plannedB = b.plannedDate ? new Date(b.plannedDate).getTime() : 0;
+      if (plannedA !== plannedB) return plannedA - plannedB;
+
+      const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return createdA - createdB;
+    })
+    .map((task) => task.id);
+};
+
+const mergeQueueOrder = (
+  currentQueue: string[],
+  computedQueue: string[],
+): string[] => {
+  const available = new Set(computedQueue);
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  currentQueue.forEach((id) => {
+    if (!available.has(id) || seen.has(id)) {
+      return;
+    }
+
+    merged.push(id);
+    seen.add(id);
+  });
+
+  computedQueue.forEach((id) => {
+    if (seen.has(id)) {
+      return;
+    }
+
+    merged.push(id);
+    seen.add(id);
+  });
+
+  return merged;
+};
+
+const reconcileFocusModeState = (
+  _previous: MomentumState,
+  next: MomentumState,
+): FocusModeState => {
+  const normalized = createFocusModeState(next.focusMode);
+
+  if (!normalized.enabled) {
+    return normalized;
+  }
+
+  const computedQueue = computeFocusQueue(next.tasks, next.settings);
+  const mergedQueue = mergeQueueOrder(normalized.queue, computedQueue);
+
+  let activeTaskId = normalized.activeTaskId;
+  if (!activeTaskId || !mergedQueue.includes(activeTaskId)) {
+    activeTaskId = mergedQueue[0] ?? null;
+  }
+
+  return {
+    enabled: true,
+    activeTaskId,
+    queue: mergedQueue,
+  };
+};
+
 const createDefaultState = (): MomentumState => ({
   tasks: [],
   settings: { ...DEFAULT_USER_SETTINGS },
-  focusMode: false,
+  focusMode: createFocusModeState(),
   autoPlanEnabled: true,
   session: createDefaultSession(),
 });
@@ -82,10 +194,20 @@ const hydrateState = (): MomentumState => {
     return createDefaultState();
   }
 
-  return {
+  const base: MomentumState = {
     ...createDefaultState(),
     ...persisted,
     settings: { ...DEFAULT_USER_SETTINGS, ...persisted.settings },
+    focusMode: createFocusModeState(
+      typeof persisted.focusMode === "boolean"
+        ? { enabled: persisted.focusMode }
+        : persisted.focusMode ?? {},
+    ),
+  };
+
+  return {
+    ...base,
+    focusMode: reconcileFocusModeState(base, base),
   };
 };
 
@@ -143,14 +265,23 @@ const setState = (
 
   if (!patch) return;
 
-  const next: MomentumState = {
+  let next: MomentumState = {
     ...previous,
     ...patch,
   };
 
-  const changed = (Object.keys(patch) as Array<keyof MomentumState>).some(
-    (key) => previous[key] !== next[key],
-  );
+  next = {
+    ...next,
+    focusMode: reconcileFocusModeState(previous, next),
+  };
+
+  const focusModeChanged = previous.focusMode !== next.focusMode;
+
+  const changed =
+    focusModeChanged ||
+    (Object.keys(patch) as Array<keyof MomentumState>).some(
+      (key) => previous[key] !== next[key],
+    );
 
   if (!changed) {
     return;
@@ -209,12 +340,175 @@ export const setAutoPlanEnabled = (enabled: boolean): void => {
   setState({ autoPlanEnabled: enabled });
 };
 
+export const enterFocusMode = (): void => {
+  setState(
+    (current) => ({
+      focusMode: createFocusModeState({
+        ...current.focusMode,
+        enabled: true,
+      }),
+    }),
+    { skipAutoPlan: true },
+  );
+};
+
+export const exitFocusMode = (): void => {
+  setState(
+    { focusMode: createFocusModeState({ enabled: false }) },
+    { skipAutoPlan: true },
+  );
+};
+
 export const setFocusMode = (enabled: boolean): void => {
-  setState({ focusMode: enabled });
+  if (enabled) {
+    enterFocusMode();
+    return;
+  }
+
+  exitFocusMode();
 };
 
 export const toggleFocusMode = (): void => {
-  setState((current) => ({ focusMode: !current.focusMode }));
+  setState(
+    (current) => ({
+      focusMode: createFocusModeState({
+        ...current.focusMode,
+        enabled: !current.focusMode.enabled,
+      }),
+    }),
+    { skipAutoPlan: true },
+  );
+};
+
+export const startFocusTask = (): void => {
+  const snapshot = getState();
+  const { focusMode, tasks } = snapshot;
+  if (!focusMode.enabled || !focusMode.activeTaskId) {
+    return;
+  }
+
+  const activeTask = tasks.find((task) => task.id === focusMode.activeTaskId);
+  if (!activeTask || activeTask.status === Status.ACTIVE) {
+    return;
+  }
+
+  updateTask(focusMode.activeTaskId, {
+    status: Status.ACTIVE,
+    completedAt: null,
+  });
+};
+
+export const completeFocusTask = (): void => {
+  const snapshot = getState();
+  const { focusMode, tasks } = snapshot;
+  if (!focusMode.enabled || !focusMode.activeTaskId) {
+    return;
+  }
+
+  const activeTask = tasks.find((task) => task.id === focusMode.activeTaskId);
+  if (!activeTask || activeTask.status === Status.DONE) {
+    return;
+  }
+
+  updateTask(focusMode.activeTaskId, {
+    status: Status.DONE,
+    completedAt: new Date().toISOString(),
+    manualPinned: false,
+  });
+};
+
+export const skipFocusTask = (): void => {
+  const snapshot = getState();
+  const { focusMode, tasks } = snapshot;
+  if (!focusMode.enabled || !focusMode.activeTaskId) {
+    return;
+  }
+
+  const activeTaskId = focusMode.activeTaskId;
+  const activeTask = tasks.find((task) => task.id === activeTaskId);
+
+  setState(
+    (current) => {
+      if (
+        !current.focusMode.enabled ||
+        current.focusMode.queue.length <= 1 ||
+        current.focusMode.activeTaskId !== activeTaskId
+      ) {
+        return null;
+      }
+
+      const queue = current.focusMode.queue.slice();
+      const index = queue.indexOf(activeTaskId);
+      if (index === -1) {
+        return null;
+      }
+
+      const [rotated] = queue.splice(index, 1);
+      queue.push(rotated);
+
+      return {
+        focusMode: {
+          ...current.focusMode,
+          queue,
+          activeTaskId: queue[0] ?? rotated ?? null,
+        },
+      };
+    },
+    { skipAutoPlan: true },
+  );
+
+  if (activeTask && activeTask.status === Status.ACTIVE) {
+    updateTask(activeTaskId, {
+      status: Status.BACKLOG,
+      completedAt: null,
+    });
+  }
+};
+
+export const focusNextTask = (): void => {
+  const snapshot = getState();
+  const { focusMode, tasks } = snapshot;
+  if (!focusMode.enabled || !focusMode.activeTaskId) {
+    return;
+  }
+
+  if (focusMode.queue.length <= 1) {
+    return;
+  }
+
+  const activeTaskId = focusMode.activeTaskId;
+  const activeTask = tasks.find((task) => task.id === activeTaskId);
+
+  setState(
+    (current) => {
+      if (!current.focusMode.enabled || current.focusMode.activeTaskId !== activeTaskId) {
+        return null;
+      }
+
+      const queue = current.focusMode.queue;
+      const index = queue.indexOf(activeTaskId);
+      if (index === -1) {
+        return null;
+      }
+
+      const nextIndex = (index + 1) % queue.length;
+
+      return {
+        focusMode: {
+          ...current.focusMode,
+          activeTaskId: queue[nextIndex] ?? current.focusMode.activeTaskId,
+        },
+      };
+    },
+    { skipAutoPlan: true },
+  );
+
+  if (activeTask && activeTask.status === Status.ACTIVE) {
+    updateTask(activeTaskId, {
+      status: Status.BACKLOG,
+      completedAt: null,
+    });
+  }
 };
 
 export const upsertTask = (task: Task): void => {
@@ -326,7 +620,7 @@ export const useTasks = (): Task[] => useMomentumStore((store) => store.tasks);
 export const useSettings = (): UserSettings =>
   useMomentumStore((store) => store.settings);
 
-export const useFocusMode = (): boolean =>
+export const useFocusMode = (): FocusModeState =>
   useMomentumStore((store) => store.focusMode);
 
 export const useSession = (): SessionInfo =>

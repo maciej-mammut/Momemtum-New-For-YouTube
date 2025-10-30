@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
+import { FocusModePanel } from "@/components/focus-mode-panel"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { TaskBoard } from "@/components/task-board"
@@ -15,6 +16,7 @@ import {
   updateTask,
   useMomentumSelectors,
 } from "@/lib/momentum-store"
+import { cn } from "@/lib/utils"
 import { Task } from "@/types/momentum"
 
 export default function AppPage() {
@@ -91,11 +93,11 @@ export default function AppPage() {
             </Button>
             <Button
               type="button"
-              variant={focusMode ? "default" : "outline"}
+              variant={focusMode.enabled ? "default" : "outline"}
               onClick={() => toggleFocusMode()}
               className="gap-2"
             >
-              {focusMode ? "Focus mode on" : "Enable focus mode"}
+              {focusMode.enabled ? "Focus mode on" : "Enable focus mode"}
             </Button>
             <Button type="button" variant="ghost" asChild>
               <Link href="/app/settings" className="gap-2">
@@ -120,12 +122,19 @@ export default function AppPage() {
         </form>
       </header>
 
-      <TaskBoard
-        tasks={tasks}
-        weekSpan={settings.weekSpan}
-        onOpenTask={(taskId) => setSelectedTaskId(taskId)}
-        onUpdateTask={handleTaskUpdate}
-      />
+      <div
+        className={cn(
+          "transition-opacity duration-200",
+          focusMode.enabled && "pointer-events-none opacity-40",
+        )}
+      >
+        <TaskBoard
+          tasks={tasks}
+          weekSpan={settings.weekSpan}
+          onOpenTask={(taskId) => setSelectedTaskId(taskId)}
+          onUpdateTask={handleTaskUpdate}
+        />
+      </div>
 
       <TaskEditorSheet
         task={selectedTask}
@@ -137,6 +146,8 @@ export default function AppPage() {
         }}
         onUpdate={handleSheetUpdate}
       />
+
+      <FocusModePanel />
     </div>
   )
 }
