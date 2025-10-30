@@ -1,8 +1,6 @@
 "use client"
 
-/* eslint-disable react-hooks/refs */
-
-import { MouseEvent, MutableRefObject, RefObject } from "react"
+import { CSSProperties, MouseEvent } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -38,13 +36,16 @@ export interface TaskCardProps {
   onTogglePinned: (taskId: string, pinned: boolean) => void
   draggable: {
     attributes: DraggableAttributes
-    listeners: DraggableListeners
-    nodeRef: MutableRefObject<HTMLElement | null>
+    listeners?: DraggableListeners
+    setNodeRef: (element: HTMLElement | null) => void
     isDragging: boolean
+    style?: CSSProperties
   }
 }
 
 export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, draggable }: TaskCardProps) {
+  const { attributes, listeners, setNodeRef, isDragging, style } = draggable
+
   const handleOpen = () => {
     onOpenDetails(task.id)
   }
@@ -66,7 +67,7 @@ export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, 
   }
 
   const handleCardClick = (event: MouseEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement)?.closest("[data-quick-action]") || draggable.isDragging) {
+    if ((event.target as HTMLElement)?.closest("[data-quick-action]") || isDragging) {
       return
     }
     handleOpen()
@@ -77,13 +78,14 @@ export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, 
 
   return (
     <div
-      ref={draggable.nodeRef as unknown as RefObject<HTMLDivElement>}
-      {...draggable.attributes}
-      {...draggable.listeners}
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
       onClick={handleCardClick}
+      style={style}
       className={cn(
         "group flex cursor-grab flex-col gap-3 rounded-lg border border-border/60 bg-background/70 p-4 text-left shadow-sm transition hover:border-border hover:shadow-md",
-        draggable.isDragging && "cursor-grabbing opacity-80 ring-2 ring-primary",
+        isDragging && "cursor-grabbing opacity-80 ring-2 ring-primary",
         task.status === Status.DONE &&
           "border-emerald-500/50 bg-emerald-500/10 text-emerald-900 shadow-none dark:text-emerald-100",
       )}
