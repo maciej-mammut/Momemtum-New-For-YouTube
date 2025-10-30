@@ -18,10 +18,12 @@ import {
   useMomentumSelectors,
 } from "@/lib/momentum-store"
 import { cn } from "@/lib/utils"
+import { useHasHydrated } from "@/lib/use-has-hydrated"
 import { Task } from "@/types/momentum"
 
 export default function AppPage() {
   const router = useRouter()
+  const hasHydrated = useHasHydrated()
   const [quickTitle, setQuickTitle] = useState("")
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const signOutRedirectRef = useRef(false)
@@ -74,6 +76,10 @@ export default function AppPage() {
     clearSession()
     router.replace("/")
   }, [router])
+
+  if (!hasHydrated) {
+    return <div className="flex flex-1 flex-col gap-6" aria-hidden />
+  }
 
   if (!session.isAuthenticated) {
     return null
