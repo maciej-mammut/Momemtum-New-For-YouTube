@@ -1,0 +1,204 @@
+/**
+ * Core Momentum domain types and helpers shared across the application.
+ */
+
+/**
+ * Priority levels available to a task.
+ *
+ * The default priority applied during quick capture is {@link Priority.MEDIUM}.
+ */
+export enum Priority {
+  NONE = "none",
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
+}
+
+/**
+ * Task lifecycle states. Most workflows begin in {@link Status.BACKLOG}
+ * and progress through to {@link Status.DONE}. Items are only removed from
+ * user-facing views once they enter {@link Status.ARCHIVED}.
+ */
+export enum Status {
+  BACKLOG = "backlog",
+  ACTIVE = "active",
+  BLOCKED = "blocked",
+  DONE = "done",
+  ARCHIVED = "archived",
+}
+
+/**
+ * Known scheduling horizons used when grouping tasks by planned date.
+ */
+export type TimeHorizon =
+  | "unscheduled"
+  | "overdue"
+  | "today"
+  | "tomorrow"
+  | "thisWeek"
+  | "later";
+
+/**
+ * User-configurable preferences that influence how Momentum behaves.
+ *
+ * These values should be persisted and respected across all interactive views.
+ */
+export interface UserSettings {
+  /** Default priority assigned to newly created tasks when none is specified. */
+  defaultPriority: Priority;
+  /** Preferred time zone identifier, e.g. `America/New_York`. */
+  timeZone: string;
+  /** How the planned date should be formatted for display (Intl pattern). */
+  dateFormat: Intl.DateTimeFormatOptions;
+  /** Number of days shown in the "This Week" horizon grouping. */
+  weekSpan: number;
+  /** Number of days to keep completed items visible before auto-archiving. */
+  completionGracePeriod: number;
+}
+
+/**
+ * Lightweight task representation shared between server and client logic.
+ *
+ * All timestamps are stored as ISO-8601 strings. Optional fields default to `null`
+ * unless otherwise noted.
+ */
+export interface Task {
+  /** Stable identifier used for updates. */
+  id: string;
+  /** Short descriptive title rendered in task lists. */
+  title: string;
+  /** Long-form notes or context shown in detail panes. */
+  notes?: string | null;
+  /** Priority flag, defaults to {@link Priority.MEDIUM}. */
+  priority: Priority;
+  /** Lifecycle status, defaults to {@link Status.BACKLOG}. */
+  status: Status;
+  /** ISO string indicating when the task was created. */
+  createdAt: string;
+  /** ISO string for when the task was last updated. */
+  updatedAt?: string | null;
+  /** Planned completion date as an ISO string. */
+  plannedDate?: string | null;
+  /** Date the task moved to {@link Status.DONE}. */
+  completedAt?: string | null;
+  /** Optional labels/tags applied by the user. */
+  tags?: string[];
+}
+
+/**
+ * Default user preferences used when no stored configuration is available.
+ */
+export const DEFAULT_USER_SETTINGS: UserSettings = {
+  defaultPriority: Priority.MEDIUM,
+  timeZone: "UTC",
+  dateFormat: { month: "short", day: "numeric" },
+  weekSpan: 7,
+  completionGracePeriod: 3,
+};
+
+/**
+ * Priority weights used when calculating agenda ordering or focus suggestions.
+ */
+export const PRIORITY_WEIGHTS: Record<Priority, number> = {
+  [Priority.NONE]: 0,
+  [Priority.LOW]: 1,
+  [Priority.MEDIUM]: 5,
+  [Priority.HIGH]: 10,
+};
+
+/**
+ * Human-readable labels matching the {@link Priority} enum.
+ */
+export const PRIORITY_LABELS: Record<Priority, string> = {
+  [Priority.NONE]: "No priority",
+  [Priority.LOW]: "Low",
+  [Priority.MEDIUM]: "Medium",
+  [Priority.HIGH]: "High",
+};
+
+const MS_IN_DAY = 86_400_000;
+
+const startOfDay = (date: Date): Date => {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+};
+
+const toDate = (value: string | Date): Date =>
+  value instanceof Date ? value : new Date(value);
+
+/**
+ * Determine which scheduling bucket a planned date falls into relative to a reference date.
+ */
+export const getTimeHorizon = (
+  planned: string | Date | null | undefined,
+  reference: Date = new Date(),
+  options: { weekSpan?: number } = {},
+): TimeHorizon => {
+  if (!planned) return "unscheduled";
+
+  const horizonSpan = options.weekSpan ?? DEFAULT_USER_SETTINGS.weekSpan;
+  const refDay = startOfDay(reference);
+  const plannedDay = startOfDay(toDate(planned));
+
+  const diff = Math.round((plannedDay.getTime() - refDay.getTime()) / MS_IN_DAY);
+
+  if (diff < 0) return "overdue";
+  if (diff === 0) return "today";
+  if (diff === 1) return "tomorrow";
+  if (diff < horizonSpan) return "thisWeek";
+  return "later";
+};
+
+/**
+ * Order in which time horizons should be displayed in UI groupings.
+ */
+export const TIME_HORIZON_ORDER: TimeHorizon[] = [
+  "overdue",
+  "today",
+  "tomorrow",
+  "thisWeek",
+  "later",
+  "unscheduled",
+];
+
+/**
+ * Utility to format a planned date using {@link UserSettings.dateFormat} defaults.
+ *
+ * Returns an empty string when no date is available.
+ */
+export const formatPlannedDate = (
+  planned: string | Date | null | undefined,
+  locale: string = "default",
+  format: Intl.DateTimeFormatOptions = DEFAULT_USER_SETTINGS.dateFormat,
+  timeZone: string = DEFAULT_USER_SETTINGS.timeZone,
+): string => {
+  if (!planned) return "";
+
+  const date = toDate(planned);
+  return new Intl.DateTimeFormat(locale, { ...format, timeZone }).format(date);
+};
+
+/**
+ * Convenience predicate for checking whether a task is complete.
+ */
+export const isTaskComplete = (task: Task): boolean => task.status === Status.DONE;
+
+/**
+ * Convenience predicate for checking whether a task should be auto-archived
+ * based on {@link UserSettings.completionGracePeriod}.
+ */
+export const shouldAutoArchive = (
+  task: Task,
+  settings: UserSettings = DEFAULT_USER_SETTINGS,
+  reference: Date = new Date(),
+): boolean => {
+  if (task.status !== Status.DONE || !task.completedAt) {
+    return false;
+  }
+
+  const completedDay = startOfDay(toDate(task.completedAt));
+  const refDay = startOfDay(reference);
+  const diff = Math.round((refDay.getTime() - completedDay.getTime()) / MS_IN_DAY);
+  return diff >= settings.completionGracePeriod;
+};
