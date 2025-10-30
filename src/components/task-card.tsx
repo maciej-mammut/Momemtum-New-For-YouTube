@@ -3,16 +3,6 @@
 /* eslint-disable react-hooks/refs */
 
 import { MouseEvent, MutableRefObject, RefObject } from "react"
-import {
-  CalendarClock,
-  CheckCircle2,
-  Clock3,
-  GripVertical,
-  MoreHorizontal,
-  Pin,
-  PinOff,
-} from "lucide-react"
-
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -21,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Icon } from "@/components/icons"
 import { cn } from "@/lib/utils"
 import { PRIORITY_LABELS, Priority, Status, Task, formatPlannedDate } from "@/types/momentum"
 import { DraggableAttributes, DraggableListeners } from "@dnd-kit/core"
@@ -99,7 +90,7 @@ export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, 
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <GripVertical className="h-4 w-4 opacity-60" aria-hidden />
+          <Icon name="grip" className="h-4 w-4 opacity-60" />
           <Badge className={cn("text-xs font-medium", priorityStyles[task.priority])}>
             {PRIORITY_LABELS[task.priority]}
           </Badge>
@@ -118,7 +109,7 @@ export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, 
               data-quick-action
               onClick={(event) => event.stopPropagation()}
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <Icon name="moreHorizontal" className="h-4 w-4" />
               <span className="sr-only">Change status</span>
             </Button>
           </DropdownMenuTrigger>
@@ -133,7 +124,7 @@ export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, 
                 >
                   {statusLabels[status]}
                   {task.status === status ? (
-                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                    <Icon name="checkCircle" className="h-4 w-4 text-primary" />
                   ) : null}
                 </DropdownMenuItem>
               ))}
@@ -145,13 +136,13 @@ export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, 
         <p className="text-base font-medium text-foreground">{task.title}</p>
         {deadline ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CalendarClock className="h-4 w-4" />
+            <Icon name="calendarClock" className="h-4 w-4" />
             <span>Due {deadline}</span>
           </div>
         ) : null}
         {duration > 0 ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock3 className="h-4 w-4" />
+            <Icon name="clock" className="h-4 w-4" />
             <span>{duration} min</span>
           </div>
         ) : null}
@@ -168,7 +159,10 @@ export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, 
           onClick={handleTogglePinned}
           data-quick-action
         >
-          {task.manualPinned ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
+          <Icon
+            name={task.manualPinned ? "pin" : "pinOff"}
+            className="h-4 w-4"
+          />
           <span className="sr-only">Toggle pin</span>
         </Button>
         <Button
@@ -178,7 +172,7 @@ export function TaskCard({ task, onOpenDetails, onStatusChange, onTogglePinned, 
           onClick={handleMarkDone}
           data-quick-action
         >
-          <CheckCircle2 className="h-4 w-4" />
+          <Icon name="checkCircle" className="h-4 w-4" />
           <span className="sr-only">Mark done</span>
         </Button>
       </div>
