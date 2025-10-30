@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
@@ -24,10 +25,33 @@ import {
   updateSettings,
   useMomentumSelectors,
 } from "@/lib/momentum-store"
-import { Priority, PRIORITY_LABELS } from "@/types/momentum"
+import {
+  Priority,
+  PRIORITY_LABELS,
+  WEEKDAY_LABELS,
+  WEEKDAY_SEQUENCE,
+  WEEKDAY_SHORT_LABELS,
+  WeekdayName,
+  WorkingHoursEntry,
+} from "@/types/momentum"
 
 const WEEK_SPAN_RANGE = { min: 3, max: 21 }
 const COMPLETION_GRACE_RANGE = { min: 0, max: 30 }
+
+const WORKING_DAY_CONFIG = WEEKDAY_SEQUENCE.map((day) => ({
+  key: day,
+  label: WEEKDAY_LABELS[day],
+  shortLabel: WEEKDAY_SHORT_LABELS[day],
+}))
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, index) => index)
+
+const formatHourLabel = (hour: number): string => {
+  const normalized = ((hour % 24) + 24) % 24
+  const suffix = normalized >= 12 ? "PM" : "AM"
+  const display = normalized % 12 || 12
+  return `${display} ${suffix}`
+}
 
 const clamp = (value: number, min: number, max: number): number => {
   return Math.min(max, Math.max(min, value))
@@ -58,6 +82,66 @@ export default function SettingsPage() {
     clearSession()
     router.replace("/")
   }, [router])
+
+  const handleWorkingHoursChange = useCallback(
+    (day: WeekdayName, patch: Partial<WorkingHoursEntry>) => {
+      const currentEntry = settings.workingHours[day]
+      if (!currentEntry) return
+
+      const nextEntry = { ...currentEntry, ...patch }
+      if (
+        nextEntry.enabled === currentEntry.enabled &&
+        nextEntry.startHour === currentEntry.startHour &&
+        nextEntry.durationHours === currentEntry.durationHours
+      ) {
+        return
+      }
+
+      updateSettings({
+        workingHours: {
+          [day]: nextEntry,
+        } as Partial<Record<WeekdayName, WorkingHoursEntry>>,
+      })
+    },
+    [settings.workingHours],
+  )
+
+  const handleDayToggle = useCallback(
+    (day: WeekdayName, enabled: boolean) => {
+      handleWorkingHoursChange(day, { enabled })
+    },
+    [handleWorkingHoursChange],
+  )
+
+  const handleStartHourChange = useCallback(
+    (day: WeekdayName, value: number) => {
+      if (Number.isNaN(value)) return
+      handleWorkingHoursChange(day, { startHour: value })
+    },
+    [handleWorkingHoursChange],
+  )
+
+  const handleDurationChange = useCallback(
+    (day: WeekdayName, value: number) => {
+      if (Number.isNaN(value)) return
+      handleWorkingHoursChange(day, { durationHours: value })
+    },
+    [handleWorkingHoursChange],
+  )
+
+  const handleApplyWeekdays = useCallback(() => {
+    const monday = settings.workingHours.monday
+    if (!monday) return
+
+    const patch: Partial<Record<WeekdayName, WorkingHoursEntry>> = {
+      tuesday: { ...monday },
+      wednesday: { ...monday },
+      thursday: { ...monday },
+      friday: { ...monday },
+    }
+
+    updateSettings({ workingHours: patch })
+  }, [settings.workingHours])
 
   if (!session.isAuthenticated) {
     return null
@@ -203,6 +287,112 @@ export default function SettingsPage() {
                 Number of days completed tasks remain visible before
                 auto-archiving.
               </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Working schedule</h2>
+                <p className="text-xs text-muted-foreground">
+                  Choose when you typically have focus time. Auto-plan uses these hours to
+                  determine daily capacity.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleApplyWeekdays}
+              >
+                Apply to all weekdays
+              </Button>
+            </div>
+            <div className="grid gap-3">
+              {WORKING_DAY_CONFIG.map((day) => {
+                const daySchedule = settings.workingHours[day.key]
+                const startId = `working-${day.key}-start`
+                const hoursId = `working-${day.key}-hours`
+                const minutesAvailable = daySchedule.enabled
+                  ? Math.max(0, Math.round(daySchedule.durationHours * 60))
+                  : 0
+
+                return (
+                  <div
+                    key={day.key}
+                    className="flex flex-col gap-3 rounded-lg border border-border/60 bg-background/70 p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        id={`working-${day.key}-enabled`}
+                        checked={daySchedule.enabled}
+                        onChange={(event) =>
+                          handleDayToggle(day.key, event.currentTarget.checked)
+                        }
+                        aria-label={`Toggle ${day.label} availability`}
+                      />
+                      <Label
+                        htmlFor={`working-${day.key}-enabled`}
+                        className="text-sm font-medium text-foreground"
+                      >
+                        {day.label}
+                      </Label>
+                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                      <div className="flex items-center gap-2">
+                        <Label
+                          htmlFor={startId}
+                          className="text-xs font-medium uppercase text-muted-foreground"
+                        >
+                          Start
+                        </Label>
+                        <Select
+                          id={startId}
+                          value={String(daySchedule.startHour)}
+                          onChange={(event) =>
+                            handleStartHourChange(
+                              day.key,
+                              Number.parseInt(event.target.value, 10),
+                            )
+                          }
+                          disabled={!daySchedule.enabled}
+                        >
+                          {HOUR_OPTIONS.map((hour) => (
+                            <option key={hour} value={hour}>
+                              {formatHourLabel(hour)}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label
+                          htmlFor={hoursId}
+                          className="text-xs font-medium uppercase text-muted-foreground"
+                        >
+                          Hours
+                        </Label>
+                        <Input
+                          id={hoursId}
+                          type="number"
+                          min={0}
+                          max={16}
+                          step={0.5}
+                          value={daySchedule.durationHours}
+                          onChange={(event) =>
+                            handleDurationChange(day.key, event.target.valueAsNumber)
+                          }
+                          disabled={!daySchedule.enabled}
+                          className="w-20"
+                          inputMode="decimal"
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {minutesAvailable} min
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
 

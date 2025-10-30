@@ -6,6 +6,10 @@ import {
   Status,
   Task,
   UserSettings,
+  WEEKDAY_SEQUENCE,
+  WeeklyWorkingHours,
+  WorkingHoursEntry,
+  computeWeekdayCapacityMinutes,
   getTimeHorizon,
 } from "@/types/momentum";
 
@@ -86,6 +90,112 @@ const createFocusModeState = (
     activeTaskId: enabled ? base.activeTaskId ?? null : null,
     queue: enabled ? queue : [],
   };
+};
+
+const cloneWorkingHours = (hours: WeeklyWorkingHours): WeeklyWorkingHours => {
+  const result = {} as WeeklyWorkingHours;
+  WEEKDAY_SEQUENCE.forEach((day) => {
+    const source = hours[day] ?? DEFAULT_USER_SETTINGS.workingHours[day];
+    result[day] = { ...source };
+  });
+  return result;
+};
+
+const cloneUserSettings = (settings: UserSettings): UserSettings => ({
+  ...settings,
+  dateFormat: { ...settings.dateFormat },
+  workingHours: cloneWorkingHours(settings.workingHours),
+  weekdayCapacityMinutes: { ...settings.weekdayCapacityMinutes },
+});
+
+const normalizeWorkingHoursEntry = (
+  entry: WorkingHoursEntry,
+): WorkingHoursEntry => {
+  const startHour = Number.isFinite(entry.startHour)
+    ? Math.min(23, Math.max(0, Math.round(entry.startHour)))
+    : DEFAULT_USER_SETTINGS.workingHours.monday.startHour;
+  const maxDuration = Math.max(0, 24 - startHour);
+  const rawDuration = Number.isFinite(entry.durationHours)
+    ? entry.durationHours
+    : 0;
+  const durationHours = Math.min(
+    maxDuration,
+    Math.max(0, Math.round(rawDuration * 2) / 2),
+  );
+
+  return {
+    enabled: Boolean(entry.enabled),
+    startHour,
+    durationHours,
+  };
+};
+
+const areWorkingEntriesEqual = (
+  left: WorkingHoursEntry,
+  right: WorkingHoursEntry,
+): boolean =>
+  left.enabled === right.enabled &&
+  left.startHour === right.startHour &&
+  left.durationHours === right.durationHours;
+
+const mergeWorkingHours = (
+  base: WeeklyWorkingHours,
+  patch: Partial<WeeklyWorkingHours>,
+): [WeeklyWorkingHours, boolean] => {
+  let changed = false;
+  const next = {} as WeeklyWorkingHours;
+
+  WEEKDAY_SEQUENCE.forEach((day) => {
+    const baseEntry = base[day] ?? DEFAULT_USER_SETTINGS.workingHours[day];
+    const update = patch[day];
+    if (update) {
+      const normalized = normalizeWorkingHoursEntry({ ...baseEntry, ...update });
+      if (!areWorkingEntriesEqual(normalized, baseEntry)) {
+        changed = true;
+        next[day] = normalized;
+        return;
+      }
+    }
+
+    next[day] = baseEntry;
+  });
+
+  return [changed ? next : base, changed];
+};
+
+const createUserSettings = (
+  patch?: Partial<UserSettings>,
+): UserSettings => {
+  const base = cloneUserSettings(DEFAULT_USER_SETTINGS);
+  if (!patch) {
+    base.weekdayCapacityMinutes = computeWeekdayCapacityMinutes(base.workingHours);
+    return base;
+  }
+
+  const { workingHours: workingHoursPatch, ...restPatch } = patch as Partial<
+    UserSettings
+  > & {
+    workingHours?: Partial<WeeklyWorkingHours>;
+  };
+
+  const { weekdayCapacityMinutes: _omitted, ...rest } = restPatch;
+  void _omitted;
+
+  let workingHours = base.workingHours;
+  if (workingHoursPatch) {
+    const [merged] = mergeWorkingHours(base.workingHours, workingHoursPatch);
+    workingHours = merged;
+  }
+
+  const merged: UserSettings = {
+    ...base,
+    ...rest,
+    workingHours,
+  };
+
+  merged.weekdayCapacityMinutes = computeWeekdayCapacityMinutes(merged.workingHours);
+
+  return merged;
 };
 
 const computeFocusQueue = (
@@ -182,7 +292,7 @@ const reconcileFocusModeState = (
 
 const createDefaultState = (): MomentumState => ({
   tasks: [],
-  settings: { ...DEFAULT_USER_SETTINGS },
+  settings: createUserSettings(),
   focusMode: createFocusModeState(),
   autoPlanEnabled: true,
   session: createDefaultSession(),
@@ -202,10 +312,12 @@ const hydrateState = (): MomentumState => {
     ...rest
   } = persisted;
 
+  const defaults = createDefaultState();
+
   const base: MomentumState = {
-    ...createDefaultState(),
+    ...defaults,
     ...rest,
-    settings: { ...DEFAULT_USER_SETTINGS, ...persistedSettings },
+    settings: createUserSettings(persistedSettings),
     focusMode: createFocusModeState(
       typeof persistedFocusMode === "boolean"
         ? { enabled: persistedFocusMode }
@@ -597,9 +709,50 @@ export const addQuickTask = (title: string): Task => {
 };
 
 export const updateSettings = (patch: Partial<UserSettings>): void => {
-  setState((current) => ({
-    settings: { ...current.settings, ...patch },
-  }));
+  setState((current) => {
+    const workingHoursPatch = patch.workingHours as
+      | Partial<WeeklyWorkingHours>
+      | undefined;
+
+    let workingHours = current.settings.workingHours;
+    let weekdayCapacityMinutes = current.settings.weekdayCapacityMinutes;
+    let workingHoursChanged = false;
+
+    if (workingHoursPatch) {
+      const [merged, changed] = mergeWorkingHours(
+        current.settings.workingHours,
+        workingHoursPatch,
+      );
+
+      if (changed) {
+        workingHours = merged;
+        weekdayCapacityMinutes = computeWeekdayCapacityMinutes(workingHours);
+        workingHoursChanged = true;
+      }
+    }
+
+    const nextSettings: UserSettings = {
+      ...current.settings,
+      ...patch,
+      workingHours,
+      weekdayCapacityMinutes,
+    };
+
+    const otherChanges = Object.entries(patch).some(([key, value]) => {
+      if (key === "workingHours" || key === "weekdayCapacityMinutes") {
+        return false;
+      }
+
+      const typedKey = key as keyof UserSettings;
+      return value !== undefined && value !== current.settings[typedKey];
+    });
+
+    if (!workingHoursChanged && !otherChanges) {
+      return null;
+    }
+
+    return { settings: nextSettings };
+  });
 };
 
 export const setSession = (patch: Partial<SessionInfo>): void => {
