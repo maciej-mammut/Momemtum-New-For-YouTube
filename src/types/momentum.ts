@@ -81,6 +81,8 @@ export interface Task {
   plannedDate?: string | null;
   /** Indicates whether the task was explicitly pinned by the user. */
   manualPinned?: boolean | null;
+  /** Zero-based index representing manual ordering within a column. */
+  orderIndex?: number | null;
   /** Date the task moved to {@link Status.DONE}. */
   completedAt?: string | null;
   /** Optional labels/tags applied by the user. */
