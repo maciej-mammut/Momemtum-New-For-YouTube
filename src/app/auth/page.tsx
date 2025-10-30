@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useState } from "react"
+import { FormEvent, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
 import { Badge } from "@/components/ui/badge"
@@ -15,12 +15,19 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { setSession } from "@/lib/momentum-store"
+import { setSession, useSession } from "@/lib/momentum-store"
 
 export default function AuthPage() {
   const router = useRouter()
-  const [email, setEmail] = useState("")
+  const session = useSession()
+  const [email, setEmail] = useState(session.userId ?? "")
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (session.isAuthenticated) {
+      router.replace("/app")
+    }
+  }, [router, session.isAuthenticated])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -42,6 +49,10 @@ export default function AuthPage() {
     })
 
     router.push("/app")
+  }
+
+  if (session.isAuthenticated) {
+    return null
   }
 
   return (

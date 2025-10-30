@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import {
+  clearSession,
   runAutoPlan,
   setAutoPlanEnabled,
   updateSettings,
@@ -39,9 +40,10 @@ export default function SettingsPage() {
     (state) => state.settings,
     (state) => state.autoPlanEnabled,
   ])
+  const signOutRedirectRef = useRef(false)
 
   useEffect(() => {
-    if (!session.isAuthenticated) {
+    if (!session.isAuthenticated && !signOutRedirectRef.current) {
       router.replace("/auth")
     }
   }, [router, session.isAuthenticated])
@@ -50,6 +52,12 @@ export default function SettingsPage() {
     () => Object.entries(PRIORITY_LABELS) as Array<[Priority, string]>,
     [],
   )
+
+  const handleSignOut = useCallback(() => {
+    signOutRedirectRef.current = true
+    clearSession()
+    router.replace("/")
+  }, [router])
 
   if (!session.isAuthenticated) {
     return null
@@ -70,10 +78,18 @@ export default function SettingsPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <div className="hidden items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-sm sm:flex">
+              <span className="font-medium text-foreground">
+                {session.displayName || session.userId || "Momentum Explorer"}
+              </span>
+            </div>
             <Button type="button" variant="ghost" asChild>
               <Link href="/app" className="gap-2">
                 Back to dashboard
               </Link>
+            </Button>
+            <Button type="button" variant="ghost" onClick={handleSignOut}>
+              Sign out
             </Button>
           </div>
         </div>

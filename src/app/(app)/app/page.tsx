@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
@@ -11,6 +11,7 @@ import { TaskBoard } from "@/components/task-board"
 import { TaskEditorSheet } from "@/components/task-editor-sheet"
 import {
   addQuickTask,
+  clearSession,
   runAutoPlan,
   toggleFocusMode,
   updateTask,
@@ -23,6 +24,7 @@ export default function AppPage() {
   const router = useRouter()
   const [quickTitle, setQuickTitle] = useState("")
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
+  const signOutRedirectRef = useRef(false)
 
   const [tasks, focusMode, session, settings] = useMomentumSelectors([
     (state) => state.tasks,
@@ -32,7 +34,7 @@ export default function AppPage() {
   ])
 
   useEffect(() => {
-    if (!session.isAuthenticated) {
+    if (!session.isAuthenticated && !signOutRedirectRef.current) {
       router.replace("/auth")
     }
   }, [router, session.isAuthenticated])
@@ -67,6 +69,12 @@ export default function AppPage() {
     [selectedTaskId],
   )
 
+  const handleSignOut = useCallback(() => {
+    signOutRedirectRef.current = true
+    clearSession()
+    router.replace("/")
+  }, [router])
+
   if (!session.isAuthenticated) {
     return null
   }
@@ -83,6 +91,11 @@ export default function AppPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <div className="hidden items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-sm sm:flex">
+              <span className="font-medium text-foreground">
+                {session.displayName || session.userId || "Momentum Explorer"}
+              </span>
+            </div>
             <Button
               type="button"
               variant="outline"
@@ -103,6 +116,9 @@ export default function AppPage() {
               <Link href="/app/settings" className="gap-2">
                 Settings
               </Link>
+            </Button>
+            <Button type="button" variant="ghost" onClick={handleSignOut}>
+              Sign out
             </Button>
           </div>
         </div>

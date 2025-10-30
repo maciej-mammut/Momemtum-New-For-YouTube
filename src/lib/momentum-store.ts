@@ -41,6 +41,7 @@ interface PersistedMomentumState {
   settings: UserSettings;
   focusMode: boolean | FocusModeState;
   autoPlanEnabled: boolean;
+  session?: SessionInfo;
 }
 
 type AutoPlanCallback = (state: MomentumState) => void;
@@ -68,10 +69,10 @@ const createId = (): string => {
 };
 
 const createDefaultSession = (): SessionInfo => ({
-  userId: "demo-user",
-  displayName: "Momentum Explorer",
-  isAuthenticated: true,
-  expiresAt: new Date(Date.now() + 1_800_000).toISOString(),
+  userId: null,
+  displayName: null,
+  isAuthenticated: false,
+  expiresAt: null,
 });
 
 const createFocusModeState = (
@@ -194,20 +195,30 @@ const hydrateState = (): MomentumState => {
     return createDefaultState();
   }
 
+  const {
+    session: persistedSession,
+    focusMode: persistedFocusMode,
+    settings: persistedSettings,
+    ...rest
+  } = persisted;
+
   const base: MomentumState = {
     ...createDefaultState(),
-    ...persisted,
-    settings: { ...DEFAULT_USER_SETTINGS, ...persisted.settings },
+    ...rest,
+    settings: { ...DEFAULT_USER_SETTINGS, ...persistedSettings },
     focusMode: createFocusModeState(
-      typeof persisted.focusMode === "boolean"
-        ? { enabled: persisted.focusMode }
-        : persisted.focusMode ?? {},
+      typeof persistedFocusMode === "boolean"
+        ? { enabled: persistedFocusMode }
+        : persistedFocusMode ?? {},
     ),
   };
 
   return {
     ...base,
     focusMode: reconcileFocusModeState(base, base),
+    session: persistedSession
+      ? { ...createDefaultSession(), ...persistedSession }
+      : createDefaultSession(),
   };
 };
 
@@ -222,6 +233,7 @@ const persistState = (value: MomentumState): void => {
     settings: value.settings,
     focusMode: value.focusMode,
     autoPlanEnabled: value.autoPlanEnabled,
+    session: value.session,
   };
   saveJSON(STORAGE_KEY, snapshot);
 };
@@ -595,7 +607,14 @@ export const setSession = (patch: Partial<SessionInfo>): void => {
     (current) => ({
       session: { ...current.session, ...patch },
     }),
-    { persist: false, skipAutoPlan: true },
+    { skipAutoPlan: true },
+  );
+};
+
+export const clearSession = (): void => {
+  setState(
+    { session: createDefaultSession() },
+    { skipAutoPlan: true },
   );
 };
 
