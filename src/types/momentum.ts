@@ -27,6 +27,63 @@ export enum Status {
   ARCHIVED = "archived",
 }
 
+export type WeekdayName =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+export const WEEKDAY_SEQUENCE: WeekdayName[] = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+];
+
+export const WEEKDAY_LABELS: Record<WeekdayName, string> = {
+  monday: "Monday",
+  tuesday: "Tuesday",
+  wednesday: "Wednesday",
+  thursday: "Thursday",
+  friday: "Friday",
+  saturday: "Saturday",
+  sunday: "Sunday",
+};
+
+export const WEEKDAY_SHORT_LABELS: Record<WeekdayName, string> = {
+  monday: "Mon",
+  tuesday: "Tue",
+  wednesday: "Wed",
+  thursday: "Thu",
+  friday: "Fri",
+  saturday: "Sat",
+  sunday: "Sun",
+};
+
+export const WEEKDAY_TO_INDEX: Record<WeekdayName, number> = {
+  sunday: 0,
+  monday: 1,
+  tuesday: 2,
+  wednesday: 3,
+  thursday: 4,
+  friday: 5,
+  saturday: 6,
+};
+
+export interface WorkingHoursEntry {
+  enabled: boolean;
+  startHour: number;
+  durationHours: number;
+}
+
+export type WeeklyWorkingHours = Record<WeekdayName, WorkingHoursEntry>;
+
 /**
  * Known scheduling horizons used when grouping tasks by planned date.
  */
@@ -54,7 +111,40 @@ export interface UserSettings {
   weekSpan: number;
   /** Number of days to keep completed items visible before auto-archiving. */
   completionGracePeriod: number;
+  /** Typical working hours for each weekday. */
+  workingHours: WeeklyWorkingHours;
+  /** Derived minutes of capacity for each weekday (0 = Sunday). */
+  weekdayCapacityMinutes: Partial<Record<number, number>>;
 }
+
+export const DEFAULT_WORKING_HOURS: WeeklyWorkingHours = {
+  monday: { enabled: true, startHour: 9, durationHours: 8 },
+  tuesday: { enabled: true, startHour: 9, durationHours: 8 },
+  wednesday: { enabled: true, startHour: 9, durationHours: 8 },
+  thursday: { enabled: true, startHour: 9, durationHours: 8 },
+  friday: { enabled: true, startHour: 9, durationHours: 6 },
+  saturday: { enabled: false, startHour: 9, durationHours: 0 },
+  sunday: { enabled: false, startHour: 9, durationHours: 0 },
+};
+
+export const computeWeekdayCapacityMinutes = (
+  workingHours: WeeklyWorkingHours,
+): Partial<Record<number, number>> => {
+  const capacities: Partial<Record<number, number>> = {};
+
+  WEEKDAY_SEQUENCE.forEach((day) => {
+    const entry = workingHours[day];
+    if (!entry) return;
+
+    const minutes = entry.enabled
+      ? Math.max(0, Math.round(entry.durationHours * 60))
+      : 0;
+
+    capacities[WEEKDAY_TO_INDEX[day]] = minutes;
+  });
+
+  return capacities;
+};
 
 /**
  * Lightweight task representation shared between server and client logic.
@@ -162,6 +252,8 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   dateFormat: { month: "short", day: "numeric" },
   weekSpan: 7,
   completionGracePeriod: 3,
+  workingHours: DEFAULT_WORKING_HOURS,
+  weekdayCapacityMinutes: computeWeekdayCapacityMinutes(DEFAULT_WORKING_HOURS),
 };
 
 /**
