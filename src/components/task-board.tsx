@@ -103,7 +103,7 @@ const BoardColumn = ({ column, tasks, TaskCardComponent, onAddTask }: BoardColum
   })
 
   return (
-    <div className="flex flex-shrink-0 basis-[calc((100vw-6rem)/4.5)] min-w-[clamp(320px,calc((100vw-6rem)/4.5),26rem)] flex-col gap-3">
+    <div className="group flex h-full min-h-0 flex-shrink-0 basis-[calc((100vw-6rem)/4.5)] min-w-[clamp(320px,calc((100vw-6rem)/4.5),26rem)] flex-col gap-3">
       <div>
         <h3 className="text-sm font-semibold text-foreground">{column.title}</h3>
         {column.description ? (
@@ -114,11 +114,11 @@ const BoardColumn = ({ column, tasks, TaskCardComponent, onAddTask }: BoardColum
         <div
           ref={setNodeRef}
           className={cn(
-            "flex min-h-[12rem] flex-1 flex-col gap-3 rounded-xl border border-border/60 bg-background/70 p-3 transition",
+            "flex h-full min-h-0 flex-1 flex-col gap-3 rounded-xl border border-border/60 bg-background/70 p-3 transition",
             isOver && "border-primary/50 bg-primary/5",
           )}
         >
-          <div className="flex flex-1 flex-col gap-3">
+          <div className="flex flex-1 flex-col gap-3 overflow-y-hidden group-hover:overflow-y-auto group-focus-within:overflow-y-auto pr-1">
             {tasks.length ? (
               tasks.map((task) => <TaskCardComponent key={task.id} task={task} columnId={column.id} />)
             ) : (
@@ -546,8 +546,8 @@ export function TaskBoard({ tasks, onOpenTask, onUpdateTask, weekSpan }: TaskBoa
   return (
     <>
       <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="w-full overflow-x-auto pb-4">
-          <div className="flex gap-4">
+        <div className="flex h-full min-h-0 overflow-x-auto pb-4">
+          <div className="flex h-full min-h-0 gap-4">
             {normalizedColumns.map(({ column, tasks: columnTasks }) => (
               <BoardColumn
                 key={column.id}

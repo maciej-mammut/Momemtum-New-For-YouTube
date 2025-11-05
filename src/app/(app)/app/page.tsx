@@ -116,7 +116,7 @@ export default function AppPage() {
 
       <div
         className={cn(
-          "transition-opacity duration-200",
+          "flex flex-1 min-h-0 overflow-hidden transition-opacity duration-200",
           focusMode.enabled && "pointer-events-none opacity-40",
         )}
       >
